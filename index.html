@@ -10,12 +10,14 @@
   --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e2e2e0;
   --dem: #1f5fbf; --rep: #c4302b; --good: #1d7f4e; --bad: #b3261e; --hi: #fff7d6;
   --map-dem: #1c4f9c; --map-rep: #b3261e; --map-mid: #eceae6; --map-empty: #f3f2ef; --focus: #1d1d1f;
+  --flip: #4b2a8c; --off: #dcdad5;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #141416; --panel: #1d1d20; --text: #ececee; --muted: #9a9aa2; --line: #2e2e33;
     --dem: #6ea2ff; --rep: #ff7a72; --good: #5cc98f; --bad: #ff8a80; --hi: #3a3320;
     --map-dem: #4f8ef7; --map-rep: #f0605a; --map-mid: #34343a; --map-empty: #26262b; --focus: #ffffff;
+    --flip: #b39af5; --off: #2b2b30;
     color-scheme: dark;
   }
 }
@@ -23,6 +25,7 @@
   --bg: #141416; --panel: #1d1d20; --text: #ececee; --muted: #9a9aa2; --line: #2e2e33;
   --dem: #6ea2ff; --rep: #ff7a72; --good: #5cc98f; --bad: #ff8a80; --hi: #3a3320;
   --map-dem: #4f8ef7; --map-rep: #f0605a; --map-mid: #34343a; --map-empty: #26262b; --focus: #ffffff;
+  --flip: #b39af5; --off: #2b2b30;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -95,14 +98,96 @@ tr.pinned td { box-shadow: inset 0 -2px 0 var(--focus); }
   border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px;
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.18); font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (prefers-reduced-motion: no-preference) { #map path { transition: fill 0.2s; } }
+a { color: var(--dem); }
+.crumbs { font-size: 13px; color: var(--muted); margin-bottom: 4px; min-height: 18px; }
+.crumbs a { color: var(--muted); }
+.crumbs a:hover { color: var(--text); }
+#usmap { width: 100%; height: auto; display: block; }
+#usmap path { stroke: var(--panel); stroke-width: 0.8; vector-effect: non-scaling-stroke; fill: var(--off); }
+#usmap path.race { cursor: pointer; }
+#usmap path.race:hover, #usmap path.hot { stroke: var(--focus); stroke-width: 2.5; }
+#usmap text { font-size: 11px; font-weight: 600; fill: var(--text); text-anchor: middle; pointer-events: none;
+  paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round; }
+#raceTable tbody tr { cursor: pointer; }
+#raceTable tbody tr:hover td, #raceTable tbody tr.hot td { background: color-mix(in srgb, var(--hi) 70%, transparent); }
+.needbar { display: inline-block; height: 8px; border-radius: 2px; vertical-align: middle; background: var(--flip); }
+.pill { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid currentColor; }
+.cgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.form input[type=number] { width: 100%; min-width: 0; font-size: 18px; text-align: right; font-variant-numeric: tabular-nums; }
+#coMap { width: 100%; height: auto; display: block; max-height: 420px; }
+#coMap path { stroke: var(--panel); stroke-width: 0.5; vector-effect: non-scaling-stroke; cursor: pointer; }
+#coMap path:hover { stroke: var(--focus); stroke-width: 1.5; }
+#coMap path.me { stroke: var(--focus); stroke-width: 3; }
+#strip { width: 100%; height: auto; display: block; margin-top: 8px; }
+#strip text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+#strip .lab { fill: var(--text); font-weight: 600; }
+#strip line { stroke: var(--line); }
 </style>
 </head>
 <body>
 <main>
-  <h1>Senate Flip Benchmarks</h1>
-  <p class="sub">Swing from the 2024 presidential vote needed to flip a 2026 Senate seat, projected to each county.
-    Margins are two-party (Dem − Rep share of Dem + Rep votes).</p>
+  <nav class="crumbs" id="crumbs"></nav>
+  <h1 id="title">Senate Flip Benchmarks</h1>
+  <p class="sub" id="subtitle"></p>
 
+  <section id="viewUS" hidden>
+    <div class="viz">
+      <section class="panel">
+        <div class="panelhead">
+          <h2 id="usTitle"></h2>
+          <div class="seg" id="usMode" role="group" aria-label="Map colors">
+            <button type="button" data-m="need" aria-pressed="true">Swing to flip</button>
+            <button type="button" data-m="m24" aria-pressed="false">2024 president</button>
+          </div>
+        </div>
+        <svg id="usmap" viewBox="0 0 975 610" role="img" aria-label="Map of 2026 Senate races"></svg>
+        <div class="legend"><span id="usLegLo"></span>
+          <div><div class="bar" id="usLegBar"></div><div class="ticks" id="usLegTicks"></div></div>
+          <span id="usLegHi"></span></div>
+      </section>
+      <div class="side">
+        <section class="panel readout" id="usReadout"></section>
+      </div>
+    </div>
+    <section class="panel">
+      <div class="panelhead"><h2>All 35 races, easiest flip first</h2><span class="small sync"></span></div>
+      <div class="tablewrap" style="border:0"><table id="raceTable">
+        <thead><tr><th>State</th><th>Held by</th><th>2024 president</th><th>Swing to flip</th><th style="text-align:left"></th><th>Counties complete</th></tr></thead>
+        <tbody id="raceBody"></tbody>
+      </table></div>
+    </section>
+  </section>
+
+  <section id="viewCounty" hidden>
+    <div class="cgrid">
+      <section class="panel readout">
+        <div class="panelhead"><h2 id="coHead">Benchmark</h2>
+          <div class="seg"><button type="button" id="prevCo">← Prev</button><button type="button" id="nextCo">Next →</button></div></div>
+        <div class="big" id="coBench"></div>
+        <div class="small" id="coShares"></div>
+        <svg id="strip" viewBox="0 0 360 64" role="img" aria-label="2024, benchmark and 2026 margins on one scale"></svg>
+        <dl id="coStats"></dl>
+      </section>
+      <section class="panel readout">
+        <div class="panelhead"><h2>2026 results</h2><span class="small sync"></span></div>
+        <div class="form">
+          <label>Dem / Ind. votes <input id="coD" type="number" min="0" inputmode="numeric"></label>
+          <label>Rep votes <input id="coR" type="number" min="0" inputmode="numeric"></label>
+        </div>
+        <label class="small"><input type="checkbox" id="coDone"> County is fully reported</label>
+        <dl id="coResult"></dl>
+      </section>
+      <section class="panel">
+        <div class="panelhead"><h2 id="coMapTitle">Location</h2></div>
+        <svg id="coMap" role="img" aria-label="State map with this county outlined"></svg>
+        <p class="small">Colors show each county's benchmark. Click a county to open it.</p>
+      </section>
+    </div>
+  </section>
+
+  <section id="viewState" hidden>
   <div class="controls">
     <label>State <select id="state"></select></label>
     <label>Target winner <select id="target">
@@ -151,7 +236,7 @@ tr.pinned td { box-shadow: inset 0 -2px 0 var(--focus); }
     <input id="search" placeholder="Find county (highlights map)" style="width:220px">
     <label class="small"><input type="checkbox" id="onlyDone"> Completed only</label>
     <span class="spacer"></span>
-    <span id="sync" class="small"></span>
+    <span class="small sync"></span>
     <button id="exportBtn">Export CSV</button>
     <button id="clearBtn">Clear 2026 entries</button>
   </div>
@@ -168,6 +253,7 @@ tr.pinned td { box-shadow: inset 0 -2px 0 var(--focus); }
     <thead><tr id="head"></tr></thead>
     <tbody id="body"></tbody>
   </table></div>
+  </section>
   <p class="small">2024 data: county totals from tonmcg/US_County_Level_Election_Results_08-24 (Alaska by state house district).
     Benchmarks hold 2024 turnout fixed by county. <span id="saveNote">Entries are saved in this browser only.</span></p>
 </main>
@@ -175,6 +261,7 @@ tr.pinned td { box-shadow: inset 0 -2px 0 var(--focus); }
 <script src="data/pres2024.js"></script>
 <script src="data/senate2026.js"></script>
 <script src="data/counties-geo.js"></script>
+<script src="data/states-geo.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -195,7 +282,7 @@ const store = {
 let state, rows, entries, sortKey = "name", sortDir = 1;
 let db = null, unsub = null, remoteExists = false, writing = Promise.resolve();
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-const setSync = (t) => { $("sync").textContent = t; };
+const setSync = (t) => { for (const el of document.querySelectorAll(".sync")) el.textContent = t; };
 const cleanRows = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([, e]) => e && (e.d != null || e.r != null || e.done)));
 
 // Entries live in the artifact database when available so every device sees them; otherwise in this browser.
@@ -329,6 +416,7 @@ function render() {
   ].join("");
   renderTable();
   renderViz(s);
+  if (view === "county") renderCounty(s);
 }
 
 let mode = "bench", pinned = null, hovered = null, rowByFips = {}, pathByFips = {}, summary = null;
@@ -417,14 +505,7 @@ function renderReadout(r) {
           (s.party === "D" ? r.vsBench >= 0 : r.vsBench <= 0) ? "good" : "bad") +
         row("Turnout vs 2024", r.turnout.toFixed(0) + "%") : ""}
     </dl>
-    <p class="small"><a href="#" id="toRow">Enter results for ${r.name}</a></p>`;
-  $("toRow").addEventListener("click", (ev) => {
-    ev.preventDefault();
-    if ($("onlyDone").checked || $("search").value) { $("onlyDone").checked = false; $("search").value = ""; renderTable(); renderFocus(); }
-    const tr = document.querySelector(`#body tr[data-f="${r.fips}"]`);
-    tr?.scrollIntoView({ block: "center" });
-    tr?.querySelector("input")?.focus({ preventScroll: true });
-  });
+    <p class="small"><a href="${countyHash(r.fips)}">Open ${r.name} →</a></p>`;
 }
 
 function renderScatter() {
@@ -474,7 +555,8 @@ for (const id of ["map", "scatter"]) {
   svg.addEventListener("pointerleave", () => { hovered = null; $("tip").hidden = true; renderFocus(); });
   svg.addEventListener("click", (ev) => {
     const f = ev.target.dataset?.f; if (!f) return;
-    pinned = pinned === f ? null : f; renderFocus();
+    $("tip").hidden = true;
+    location.hash = countyHash(f);
   });
 }
 $("mode").addEventListener("click", (ev) => {
@@ -482,6 +564,244 @@ $("mode").addEventListener("click", (ev) => {
   mode = m;
   for (const b of $("mode").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.m === m));
   render();
+});
+
+// ---- Views and routing: "" = US map, "#georgia" = state, "#georgia-13121" = county.
+let view = null, countyFips = null, usMode = "need", usHover = null, allEntries = {};
+const raceBySlug = Object.fromEntries(window.SENATE2026.map((s) => [slug(s.state), s.state]));
+const countyHash = (fips) => "#" + slug(state) + "-" + fips;
+const ABBR = { Alabama: "AL", Alaska: "AK", Arkansas: "AR", Colorado: "CO", Delaware: "DE", Florida: "FL", Georgia: "GA",
+  Idaho: "ID", Illinois: "IL", Iowa: "IA", Kansas: "KS", Kentucky: "KY", Louisiana: "LA", Maine: "ME", Massachusetts: "MA",
+  Michigan: "MI", Minnesota: "MN", Mississippi: "MS", Montana: "MT", Nebraska: "NE", "New Hampshire": "NH", "New Jersey": "NJ",
+  "New Mexico": "NM", "North Carolina": "NC", Ohio: "OH", Oklahoma: "OK", Oregon: "OR", "Rhode Island": "RI",
+  "South Carolina": "SC", "South Dakota": "SD", Tennessee: "TN", Texas: "TX", Virginia: "VA", "West Virginia": "WV", Wyoming: "WY" };
+
+function route() {
+  const m = /^([a-z-]+?)(?:-(\d{5}))?$/.exec(location.hash.slice(1).toLowerCase());
+  const st = m && raceBySlug[m[1]];
+  if (!st) return showView("us");
+  if (st !== state) { $("state").value = st; load(); }
+  if (m[2] && rowByFips[m[2]]) { countyFips = m[2]; showView("county"); }
+  else showView("state");
+}
+
+function showView(v) {
+  const changed = v !== view || v === "county";
+  view = v;
+  $("viewUS").hidden = v !== "us"; $("viewState").hidden = v !== "state"; $("viewCounty").hidden = v !== "county";
+  $("tip").hidden = true;
+  const home = `<a href="#">All races</a>`;
+  if (v === "us") {
+    $("crumbs").innerHTML = "";
+    $("title").textContent = "Senate Flip Benchmarks";
+    $("subtitle").textContent = "The 35 Senate races in 2026 and the swing from the 2024 presidential vote each seat needs to change hands. Click a state for county benchmarks.";
+    renderUS();
+  } else if (v === "state") {
+    $("crumbs").innerHTML = home;
+    $("title").textContent = `${state} Senate`;
+    $("subtitle").textContent = "Swing from the 2024 presidential vote needed for the target result, projected to each county. Margins are two-party (Dem − Rep share of Dem + Rep votes).";
+    render();
+  } else {
+    const r = rowByFips[countyFips];
+    $("crumbs").innerHTML = `${home} › <a href="#${slug(state)}">${state}</a>`;
+    $("title").textContent = `${r.name}, ${state}`;
+    render();
+  }
+  if (changed) scrollTo(0, 0);
+}
+
+function stateSummary(name) {
+  let d = 0, r = 0;
+  for (const c of window.PRES2024[name] || []) { d += c[2]; r += c[3]; }
+  const race = window.SENATE2026.find((x) => x.state === name);
+  const m24 = margin2p(d, r), flipTo = race.holder === "D" ? "R" : "D";
+  const done = Object.values(db ? allEntries[slug(name)] || {} : store.get("entries:" + name) || {}).filter((e) => e.done).length;
+  return { name, race, m24, flipTo, need: flipTo === "D" ? -m24 : m24, counties: (window.PRES2024[name] || []).length, done };
+}
+
+const needFill = (need) => `color-mix(in oklab, var(--flip) ${Math.round(100 - Math.min(1, Math.max(0, need) / 30) * 85)}%, var(--map-mid))`;
+const needText = (x) => x.need <= 0 ? `Already ${x.flipTo === "D" ? "D" : "R"}+${Math.abs(x.need).toFixed(1)}` : `${x.need.toFixed(1)} pts ${x.flipTo}`;
+
+function buildUS() {
+  const svg = $("usmap");
+  const races = new Set(window.SENATE2026.map((x) => x.state));
+  let h = "";
+  for (const [, g] of Object.entries(window.STATE_GEO)) {
+    h += `<path d="${g.d}" data-s="${g.name}" class="${races.has(g.name) ? "race" : ""}"></path>`;
+  }
+  for (const [, g] of Object.entries(window.STATE_GEO)) {
+    if (races.has(g.name) && !["Rhode Island", "Delaware"].includes(g.name))
+      h += `<text x="${g.label[0]}" y="${g.label[1] + 4}">${ABBR[g.name]}</text>`;
+  }
+  svg.innerHTML = h;
+  svg.addEventListener("pointermove", (ev) => {
+    const n = ev.target.closest?.("path.race")?.dataset.s || null;
+    if (n !== usHover) { usHover = n; renderUSFocus(); }
+    if (n && (!ev.pointerType || ev.pointerType === "mouse")) {
+      const x = stateSummary(n), tip = $("tip");
+      tip.innerHTML = `<b>${n}</b> · held by ${x.race.holder === "D" ? "Dem" : "Rep"}<br>2024 ${fmtM(x.m24)} · flip needs ${needText(x)}`;
+      tip.hidden = false;
+      tip.style.left = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px";
+      tip.style.top = Math.min(ev.clientY + 14, innerHeight - tip.offsetHeight - 8) + "px";
+    } else $("tip").hidden = true;
+  });
+  svg.addEventListener("pointerleave", () => { usHover = null; $("tip").hidden = true; renderUSFocus(); });
+  svg.addEventListener("click", (ev) => {
+    const n = ev.target.closest?.("path.race")?.dataset.s;
+    if (n) location.hash = slug(n);
+  });
+  $("usMode").addEventListener("click", (ev) => {
+    const m = ev.target.closest("button")?.dataset.m; if (!m) return;
+    usMode = m;
+    for (const b of $("usMode").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.m === m));
+    renderUS();
+  });
+  $("raceBody").addEventListener("click", (ev) => {
+    const n = ev.target.closest("tr")?.dataset.s; if (n) location.hash = slug(n);
+  });
+  $("raceBody").addEventListener("pointerover", (ev) => {
+    const n = ev.target.closest("tr")?.dataset.s || null;
+    if (n !== usHover) { usHover = n; renderUSFocus(); }
+  });
+  $("raceBody").addEventListener("pointerleave", () => { usHover = null; renderUSFocus(); });
+}
+
+function renderUS() {
+  const all = window.SENATE2026.map((x) => stateSummary(x.state));
+  for (const el of $("usmap").querySelectorAll("path.race")) {
+    const x = all.find((a) => a.name === el.dataset.s);
+    el.style.fill = usMode === "need" ? needFill(x.need) : fillFor(x.m24, 30);
+  }
+  $("usTitle").textContent = usMode === "need" ? "Swing needed for each seat to change hands" : "2024 presidential margin in each race";
+  if (usMode === "need") {
+    $("usLegBar").style.background = "linear-gradient(in oklab to right, var(--flip), color-mix(in oklab, var(--flip) 15%, var(--map-mid)))";
+    $("usLegTicks").innerHTML = ["0", "10", "20", "30+"].map((t) => `<span>${t}</span>`).join("");
+    $("usLegLo").textContent = "Easier"; $("usLegHi").textContent = "Harder (pts)";
+  } else {
+    $("usLegBar").style.background = "linear-gradient(in oklab to right, var(--map-rep), var(--map-mid), var(--map-dem))";
+    $("usLegTicks").innerHTML = ["R+30", "R+15", "Even", "D+15", "D+30"].map((t) => `<span>${t}</span>`).join("");
+    $("usLegLo").textContent = "Rep"; $("usLegHi").textContent = "Dem";
+  }
+  const maxNeed = Math.max(...all.map((x) => Math.max(0, x.need)));
+  $("raceBody").innerHTML = all.sort((a, b) => a.need - b.need).map((x) => `<tr data-s="${x.name}">
+    <td><a href="#${slug(x.name)}">${x.name}</a>${x.race.note && /Special/.test(x.race.note) ? ` <span class="small">special</span>` : ""}</td>
+    <td class="${x.race.holder}">${x.race.holder === "D" ? "Dem" : "Rep"}</td>
+    <td class="${cls(x.m24)}">${fmtM(x.m24)}</td>
+    <td class="${x.flipTo}">${needText(x)}</td>
+    <td style="text-align:left;width:30%"><span class="needbar" style="width:${(Math.max(0, x.need) / maxNeed * 100).toFixed(1)}%"></span></td>
+    <td>${x.done ? `${x.done} / ${x.counties}` : `<span class="small">–</span>`}</td></tr>`).join("");
+  renderUSFocus();
+}
+
+function renderUSFocus() {
+  for (const el of $("usmap").querySelectorAll("path.race")) {
+    el.classList.toggle("hot", el.dataset.s === usHover);
+    if (el.dataset.s === usHover) el.parentNode.insertBefore(el, el.parentNode.querySelector("text"));
+  }
+  for (const tr of $("raceBody").querySelectorAll("tr")) tr.classList.toggle("hot", tr.dataset.s === usHover);
+  const el = $("usReadout");
+  if (!usHover) {
+    const all = window.SENATE2026.map((x) => stateSummary(x.state));
+    const dems = all.filter((x) => x.race.holder === "D").length;
+    const flipped = all.filter((x) => x.need <= 0);
+    el.innerHTML = `<h2>2026 Senate</h2><div class="name">35 races</div>
+      <dl>
+        <dt>Held by Democrats</dt><dd class="D">${dems}</dd>
+        <dt>Held by Republicans</dt><dd class="R">${35 - dems}</dd>
+        <dt>Won by the other party in 2024</dt><dd>${flipped.map((x) => ABBR[x.name]).join(", ") || "None"}</dd>
+      </dl>
+      <p class="small">Hover a state for its numbers. Click it for county benchmarks. Swing is measured on the two-party margin and assumes a tie wins.</p>`;
+    return;
+  }
+  const x = stateSummary(usHover);
+  el.innerHTML = `<h2>Held by ${x.race.holder === "D" ? "Democrats" : "Republicans"}</h2>
+    <div class="name">${x.name}</div>
+    <div class="big ${x.flipTo}">${needText(x)}</div>
+    <div class="small">${x.need <= 0 ? `The ${x.flipTo === "D" ? "Democratic" : "Republican"} side already led here in 2024` : `Shift toward ${x.flipTo === "D" ? "Democrats" : "Republicans"} needed for the seat to change hands`}</div>
+    <dl>
+      <dt>2024 president</dt><dd class="${cls(x.m24)}">${fmtM(x.m24)}</dd>
+      <dt>Counties</dt><dd>${x.counties}${x.done ? ` (${x.done} complete)` : ""}</dd>
+      ${x.race.note ? `<dt>Note</dt><dd style="text-align:left">${x.race.note}</dd>` : ""}
+    </dl>
+    <p class="small"><a href="#${slug(x.name)}">Open ${x.name} →</a></p>`;
+}
+
+function renderCounty(s) {
+  const r = rowByFips[countyFips]; if (!r) return;
+  const pName = s.party === "D" ? "Democratic / Ind." : "Republican";
+  $("subtitle").textContent = `Benchmark for a ${pName} win at ${fmtM(s.target)} statewide, ${s.model === "uniform" ? "uniform" : "proportional"} swing. Change the target on the ${state} page.`;
+  const dShare = (r.bench + 100) / 2;
+  const otherModel = s.model === "uniform" ? "logit" : "uniform";
+  const otherBench = shifted(r.m24, solveShift(s.target, otherModel), otherModel);
+  const byVotes = [...rows].sort((a, b) => b.tp - a.tp), rank = byVotes.indexOf(r) + 1;
+  const i = rows.indexOf(r);
+  $("prevCo").dataset.f = rows[(i - 1 + rows.length) % rows.length].fips;
+  $("nextCo").dataset.f = rows[(i + 1) % rows.length].fips;
+  $("coHead").textContent = "Benchmark";
+  $("coBench").className = "big " + cls(r.bench);
+  $("coBench").textContent = fmtM(r.bench);
+  $("coShares").textContent = `Dem ${dShare.toFixed(1)}% · Rep ${(100 - dShare).toFixed(1)}% of the two-party vote`;
+  const row = (k, v, c = "") => `<dt>${k}</dt><dd class="${c}">${v}</dd>`;
+  const net = r.tp * r.bench / 100;
+  $("coStats").innerHTML =
+    row("At 2024 turnout", `Dem ${fmtInt(r.tp * dShare / 100)} · Rep ${fmtInt(r.tp * (100 - dShare) / 100)}`) +
+    row("Net votes", `${fmtInt(Math.abs(net))} ${net >= 0 ? "D" : "R"}`) +
+    row("2024 president", fmtM(r.m24), cls(r.m24)) +
+    row("Shift from 2024", fmtSigned(Math.abs(r.bench - r.m24)) + (r.bench >= r.m24 ? " D" : " R")) +
+    row(`${otherModel === "uniform" ? "Uniform" : "Proportional"} swing instead`, fmtM(otherBench), cls(otherBench)) +
+    row("2024 votes (D / R / other)", `${fmtInt(r.d24)} / ${fmtInt(r.r24)} / ${fmtInt(r.total24 - r.tp)}`) +
+    row("Share of state vote", `${(100 * r.tp / s.tp24).toFixed(1)}% · ${rank}${rank === 1 ? "st" : rank === 2 ? "nd" : rank === 3 ? "rd" : "th"} of ${rows.length}`);
+  // Margin strip: 2024, benchmark and 2026 on one axis.
+  const vals = [r.m24, r.bench, r.m26].filter((v) => v != null);
+  const lo = Math.max(-100, Math.floor((Math.min(...vals) - 6) / 5) * 5), hi = Math.min(100, Math.ceil((Math.max(...vals) + 6) / 5) * 5);
+  const X = (v) => 16 + (v - lo) / (hi - lo) * 328;
+  const mk = (v, label, fill, yTxt) => v == null ? "" : `<circle cx="${X(v).toFixed(1)}" cy="34" r="6" style="fill:${fill};stroke:var(--panel);stroke-width:2"/>
+    <text class="lab" x="${X(v).toFixed(1)}" y="${yTxt}" text-anchor="middle">${label}</text>`;
+  $("strip").innerHTML = `<line x1="16" x2="344" y1="34" y2="34"/>
+    ${lo < 0 && hi > 0 ? `<line x1="${X(0)}" x2="${X(0)}" y1="26" y2="42"/>` : ""}
+    <text x="16" y="60">${fmtM(lo).replace(".0", "")}</text><text x="344" y="60" text-anchor="end">${fmtM(hi).replace(".0", "")}</text>
+    ${mk(r.m24, "2024", "var(--muted)", 18)}${mk(r.bench, "Benchmark", "var(--focus)", r.m26 != null && Math.abs(X(r.bench) - X(r.m24)) < 50 ? 60 : 18)}
+    ${mk(r.m26, "2026", r.m26 != null ? (r.vsBench >= 0 ? "var(--map-dem)" : "var(--map-rep)") : "", 60)}`;
+  // Entry form; leave a field alone while it is being edited.
+  for (const [id, v] of [["coD", r.d26], ["coR", r.r26]]) if (document.activeElement !== $(id)) $(id).value = v ?? "";
+  $("coDone").checked = r.done;
+  $("coResult").innerHTML = r.m26 == null ? `<dt>Status</dt><dd>No 2026 votes entered</dd>` :
+    row("2026 margin", fmtM(r.m26), cls(r.m26)) +
+    row("Vs benchmark", fmtSigned(Math.abs(r.vsBench)) + (r.vsBench >= 0 ? " D" : " R"), (s.party === "D" ? r.vsBench >= 0 : r.vsBench <= 0) ? "good" : "bad") +
+    row("Net votes vs benchmark", `${fmtInt(Math.abs(r.netVsBench))} ${r.netVsBench >= 0 ? "D" : "R"}`) +
+    row("Swing from 2024", fmtSigned(Math.abs(r.swing)) + (r.swing >= 0 ? " D" : " R")) +
+    row("Turnout vs 2024", r.turnout.toFixed(0) + "%") +
+    row("Status", r.done ? "Fully reported" : "Partial; not counted in projections");
+  // State locator map, colored by benchmark.
+  const svg = $("coMap"), geo = window.COUNTY_GEO?.[r.fips.slice(0, 2)];
+  $("coMapTitle").textContent = `${state} counties`;
+  if (!geo) { svg.innerHTML = ""; svg.removeAttribute("viewBox"); return; }
+  if (svg.dataset.st !== state) {
+    svg.dataset.st = state;
+    svg.setAttribute("viewBox", `-6 -6 ${geo.w + 12} ${geo.h + 12}`);
+    svg.innerHTML = rows.filter((c) => geo.paths[c.fips]).map((c) => `<path data-f="${c.fips}" d="${geo.paths[c.fips]}"></path>`).join("");
+  }
+  for (const el of svg.querySelectorAll("path")) {
+    el.style.fill = fillFor(rowByFips[el.dataset.f].bench, 60);
+    el.classList.toggle("me", el.dataset.f === r.fips);
+  }
+  svg.querySelector("path.me")?.parentNode.appendChild(svg.querySelector("path.me"));
+}
+
+$("coMap").addEventListener("click", (ev) => { const f = ev.target.dataset?.f; if (f) location.hash = countyHash(f); });
+$("coMap").addEventListener("pointermove", (ev) => { const f = ev.target.dataset?.f; if (f) showTip(ev, f); else $("tip").hidden = true; });
+$("coMap").addEventListener("pointerleave", () => { $("tip").hidden = true; });
+for (const id of ["prevCo", "nextCo"]) $(id).addEventListener("click", () => { location.hash = countyHash($(id).dataset.f); });
+for (const id of ["coD", "coR"]) $(id).addEventListener("change", () => {
+  const v = $(id).value === "" ? null : Math.max(0, parseInt($(id).value, 10));
+  setEntry(countyFips, { [id === "coD" ? "d" : "r"]: v });
+  render();
+});
+$("coDone").addEventListener("change", () => { setEntry(countyFips, { done: $("coDone").checked }); render(); });
+addEventListener("keydown", (ev) => {
+  if (view !== "county" || ev.target.closest?.("input, textarea, select")) return;
+  if (ev.key === "ArrowLeft") $("prevCo").click();
+  if (ev.key === "ArrowRight") $("nextCo").click();
 });
 
 const COLS = [
@@ -507,7 +827,7 @@ function renderTable() {
   $("body").innerHTML = list.map((r) => {
     const good = r.vsBench == null ? "" : (party === "D" ? r.vsBench >= 0 : r.vsBench <= 0) ? "good" : "bad";
     return `<tr class="${r.done ? "done" : ""}${r.fips === pinned ? " pinned" : ""}" data-f="${r.fips}">
-      <td>${r.name}</td>
+      <td><a href="${countyHash(r.fips)}">${r.name}</a></td>
       <td class="${cls(r.m24)}">${fmtM(r.m24)}</td>
       <td class="${cls(r.bench)}"><b>${fmtM(r.bench)}</b></td>
       <td>${fmtInt(r.tp)}</td>
@@ -578,7 +898,7 @@ $("state").innerHTML = window.SENATE2026.map((s) =>
 const last = store.get("lastState");
 if (last && window.SENATE2026.some((s) => s.state === last)) $("state").value = last;
 
-$("state").addEventListener("change", load);
+$("state").addEventListener("change", () => { location.hash = slug($("state").value); });
 for (const id of ["target", "tmargin", "model"]) $(id).addEventListener("input", render);
 $("onlyDone").addEventListener("input", renderTable);
 $("search").addEventListener("input", () => {
@@ -589,7 +909,7 @@ $("search").addEventListener("input", () => {
   renderTable(); renderFocus();
 });
 $("body").addEventListener("click", (ev) => {
-  const tr = ev.target.closest("tr"); if (!tr || ev.target.closest("input")) return;
+  const tr = ev.target.closest("tr"); if (!tr || ev.target.closest("input, a")) return;
   pinned = pinned === tr.dataset.f ? null : tr.dataset.f; renderFocus();
 });
 $("head").addEventListener("click", (ev) => {
@@ -621,12 +941,18 @@ $("clearBtn").addEventListener("click", () => {
   else store.set("entries:" + state, entries);
   render();
 });
-load();
+buildUS();
+addEventListener("hashchange", route);
+route();
 (async () => {
   try { db = window.claude?.use ? await window.claude.use("db") : null; } catch { db = null; }
   if (!db) return;
   $("saveNote").textContent = "Entries sync across your devices.";
-  load();
+  db.collection("entries").onSnapshot((qs) => {
+    allEntries = Object.fromEntries(qs.docs.map((d) => [d.id, cleanRows(d.data()?.rows)]));
+    if (view === "us") renderUS();
+  }, () => {});
+  if (state) load();
 })();
 </script>
 </body>
