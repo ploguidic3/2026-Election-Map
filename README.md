@@ -21,7 +21,8 @@ Open `index.html` in a browser. It needs no server or build step.
 - For counties marked complete, "Vs benchmark" is the 2026 margin minus the
   benchmark. The summary averages it weighted by 2026 two-party votes and adds it
   to the target to give a projected statewide margin.
-- Entries are saved in the browser's local storage, per state.
+- Entries are saved per state: in the artifact database when the page is published
+  as a claude.ai artifact (shared across your devices), otherwise in browser storage.
 
 For Nebraska, enter the independent challenger's votes in the Dem column.
 

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Senate Flip Benchmarks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
 <style>
 :root {
   --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e2e2e0;
@@ -13,12 +14,19 @@
   :root:not([data-theme="light"]) {
     --bg: #141416; --panel: #1d1d20; --text: #ececee; --muted: #9a9aa2; --line: #2e2e33;
     --dem: #6ea2ff; --rep: #ff7a72; --good: #5cc98f; --bad: #ff8a80; --hi: #3a3320;
+    color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #141416; --panel: #1d1d20; --text: #ececee; --muted: #9a9aa2; --line: #2e2e33;
+  --dem: #6ea2ff; --rep: #ff7a72; --good: #5cc98f; --bad: #ff8a80; --hi: #3a3320;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
   font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 1280px; margin: 0 auto; padding: 16px; }
+main { max-width: 1280px; margin: 0 auto; padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 h1 { font-size: 20px; margin: 0 0 4px; }
 .sub { color: var(--muted); margin: 0 0 16px; }
 .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
@@ -27,6 +35,7 @@ select, input, button, textarea { font: inherit; color: var(--text); background:
   border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
 button { cursor: pointer; }
 button:hover { border-color: var(--muted); }
+button.danger { border-color: var(--bad); color: var(--bad); }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 .card .k { font-size: 12px; color: var(--muted); }
@@ -77,6 +86,7 @@ textarea { width: 100%; min-height: 110px; font-family: ui-monospace, monospace;
     <input id="search" placeholder="Filter counties" style="width:180px">
     <label class="small"><input type="checkbox" id="onlyDone"> Completed only</label>
     <span class="spacer"></span>
+    <span id="sync" class="small"></span>
     <button id="exportBtn">Export CSV</button>
     <button id="clearBtn">Clear 2026 entries</button>
   </div>
@@ -94,7 +104,7 @@ textarea { width: 100%; min-height: 110px; font-family: ui-monospace, monospace;
     <tbody id="body"></tbody>
   </table></div>
   <p class="small">2024 data: county totals from tonmcg/US_County_Level_Election_Results_08-24 (Alaska by state house district).
-    Benchmarks hold 2024 turnout fixed by county. Entries are saved in this browser only.</p>
+    Benchmarks hold 2024 turnout fixed by county. <span id="saveNote">Entries are saved in this browser only.</span></p>
 </main>
 
 <script src="data/pres2024.js"></script>
@@ -117,6 +127,31 @@ const store = {
 };
 
 let state, rows, entries, sortKey = "name", sortDir = 1;
+let db = null, unsub = null, remoteExists = false, writing = Promise.resolve();
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+const setSync = (t) => { $("sync").textContent = t; };
+const cleanRows = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([, e]) => e && (e.d != null || e.r != null || e.done)));
+
+// Entries live in the artifact database when available so every device sees them; otherwise in this browser.
+function subscribe() {
+  unsub?.();
+  const ref = db.doc("entries/" + slug(state));
+  unsub = ref.onSnapshot((snap) => {
+    remoteExists = snap.exists;
+    entries = cleanRows(snap.data()?.rows);
+    setSync(snap.metadata?.hasPendingWrites ? "Saving…" : "Synced");
+    render();
+  }, (e) => setSync("Sync stopped: " + (e?.message || "error") + ". Reload to retry."));
+}
+
+function saveRows(patch) {
+  if (!db) { store.set("entries:" + state, entries); return; }
+  const ref = db.doc("entries/" + slug(state));
+  setSync("Saving…");
+  writing = writing.then(() => remoteExists ? ref.update({ rows: patch }) : ref.set({ rows: cleanRows(entries) }))
+    .then(() => { remoteExists = true; setSync("Synced"); })
+    .catch((e) => setSync("Not saved: " + (e?.message || "error")));
+}
 
 // Two-party margin in points, D positive.
 const margin2p = (d, r) => d + r > 0 ? 100 * (d - r) / (d + r) : null;
@@ -156,9 +191,10 @@ function load() {
   rows = (window.PRES2024[state] || []).map(([fips, name, d, r, total]) => ({
     fips, name, d24: d, r24: r, total24: total, tp: d + r, m24: margin2p(d, r),
   }));
-  entries = store.get("entries:" + state) || {};
+  entries = db ? {} : store.get("entries:" + state) || {};
   store.set("lastState", state);
   render();
+  if (db) { setSync("Loading…"); subscribe(); }
 }
 
 function compute() {
@@ -232,6 +268,8 @@ const COLS = [
 ];
 
 function renderTable() {
+  const a = document.activeElement, af = a?.closest?.("#body tr")?.dataset.f, ac = a?.dataset?.c;
+  const typing = af && a.type === "number" ? a.value : null;
   $("head").innerHTML = COLS.map(([k, l]) =>
     `<th data-k="${k}">${l}${sortKey === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
   const q = $("search").value.trim().toLowerCase();
@@ -259,12 +297,17 @@ function renderTable() {
       <td>${r.turnout == null ? "" : r.turnout.toFixed(0)}</td>
     </tr>`;
   }).join("");
+  if (af && ac) {
+    const el = document.querySelector(`tr[data-f="${af}"] [data-c="${ac}"]`);
+    if (el) { if (typing != null) el.value = typing; el.focus(); }
+  }
 }
 
-function setEntry(fips, patch) {
-  const e = { ...(entries[fips] || {}), ...patch };
+function setEntry(fips, patch, save = true) {
+  const e = { d: null, r: null, done: false, ...(entries[fips] || {}), ...patch };
   if (e.d == null && e.r == null && !e.done) delete entries[fips]; else entries[fips] = e;
-  store.set("entries:" + state, entries);
+  if (save) saveRows({ [fips]: e });
+  return e;
 }
 
 const norm = (s) => s.toLowerCase().replace(/\b(county|parish|borough|census area|city and borough|municipality)\b/g, "")
@@ -273,7 +316,7 @@ const norm = (s) => s.toLowerCase().replace(/\b(county|parish|borough|census are
 function applyPaste() {
   const byKey = new Map();
   for (const r of rows) { byKey.set(r.fips, r); byKey.set(norm(r.name), r); }
-  let ok = 0; const miss = [];
+  let ok = 0; const miss = [], patch = {};
   for (const line of $("paste").value.split(/\r?\n/)) {
     const parts = line.split(/[,\t]/).map((x) => x.trim());
     if (parts.length < 3 || !parts[0]) continue;
@@ -281,21 +324,29 @@ function applyPaste() {
     const d = parseInt(parts[1].replace(/[^0-9]/g, ""), 10), rep = parseInt(parts[2].replace(/[^0-9]/g, ""), 10);
     if (!r || isNaN(d) || isNaN(rep)) { miss.push(parts[0]); continue; }
     const done = parts[3] == null || parts[3] === "" || /^(1|y|yes|true|x)$/i.test(parts[3]);
-    setEntry(r.fips, { d, r: rep, done });
+    patch[r.fips] = setEntry(r.fips, { d, r: rep, done }, false);
     ok++;
   }
+  if (ok) saveRows(patch);
   $("pasteMsg").textContent = `Applied ${ok} rows.` + (miss.length ? ` Not matched: ${miss.slice(0, 8).join(", ")}${miss.length > 8 ? "…" : ""}` : "");
   render();
 }
 
-function exportCsv() {
+async function exportCsv() {
   const s = compute();
   const lines = [["fips", "county", "margin_2024", "benchmark", "votes_2024_2p", "dem_2026", "rep_2026", "complete", "margin_2026", "vs_benchmark", "swing"].join(",")];
   for (const r of rows) lines.push([r.fips, `"${r.name}"`, r.m24.toFixed(2), r.bench.toFixed(2), r.tp, r.d26 ?? "", r.r26 ?? "",
     r.done ? 1 : 0, r.m26?.toFixed(2) ?? "", r.vsBench?.toFixed(2) ?? "", r.swing?.toFixed(2) ?? ""].join(","));
+  const filename = `${state.replace(/ /g, "_")}_benchmarks_${s.party}.csv`;
+  const downloads = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
+  if (downloads) {
+    try { await downloads.save({ filename, data: lines.join("\n") }); }
+    catch (e) { if (e?.code !== "declined") setSync("Export failed: " + (e?.message || e?.code)); }
+    return;
+  }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-  a.download = `${state.replace(/ /g, "_")}_benchmarks_${s.party}.csv`;
+  a.download = filename;
   a.click();
 }
 
@@ -317,19 +368,32 @@ $("body").addEventListener("change", (ev) => {
   if (c === "done") setEntry(fips, { done: el.checked });
   else { const v = el.value === "" ? null : Math.max(0, parseInt(el.value, 10)); setEntry(fips, { [c]: v }); }
   // Re-render after focus moves so tabbing between inputs keeps its place.
-  setTimeout(() => {
-    const a = document.activeElement, f = a?.closest?.("tr")?.dataset.f, ac = a?.dataset?.c;
-    render();
-    if (f && ac) document.querySelector(`tr[data-f="${f}"] [data-c="${ac}"]`)?.focus();
-  }, 0);
+  setTimeout(render, 0);
 });
 $("pasteBtn").addEventListener("click", applyPaste);
 $("exportBtn").addEventListener("click", exportCsv);
+let clearArmed = null;
 $("clearBtn").addEventListener("click", () => {
-  if (!confirm(`Clear all 2026 entries for ${state}?`)) return;
-  entries = {}; store.set("entries:" + state, entries); render();
+  const btn = $("clearBtn");
+  if (!clearArmed) {
+    btn.textContent = `Confirm: clear ${state}`; btn.classList.add("danger");
+    clearArmed = setTimeout(() => { clearArmed = null; btn.textContent = "Clear 2026 entries"; btn.classList.remove("danger"); }, 4000);
+    return;
+  }
+  clearTimeout(clearArmed); clearArmed = null; btn.textContent = "Clear 2026 entries"; btn.classList.remove("danger");
+  entries = {};
+  if (db) { setSync("Saving…"); writing = writing.then(() => db.doc("entries/" + slug(state)).set({ rows: {} }))
+    .then(() => { remoteExists = true; setSync("Synced"); }).catch((e) => setSync("Not saved: " + (e?.message || "error"))); }
+  else store.set("entries:" + state, entries);
+  render();
 });
 load();
+(async () => {
+  try { db = window.claude?.use ? await window.claude.use("db") : null; } catch { db = null; }
+  if (!db) return;
+  $("saveNote").textContent = "Entries sync across your devices.";
+  load();
+})();
 </script>
 </body>
 </html>
