@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Senate Flip Benchmarks</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e2e2e0;
+  --dem: #1f5fbf; --rep: #c4302b; --good: #1d7f4e; --bad: #b3261e; --hi: #fff7d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141416; --panel: #1d1d20; --text: #ececee; --muted: #9a9aa2; --line: #2e2e33;
+    --dem: #6ea2ff; --rep: #ff7a72; --good: #5cc98f; --bad: #ff8a80; --hi: #3a3320;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1280px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+.sub { color: var(--muted); margin: 0 0 16px; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
+.controls label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+select, input, button, textarea { font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+button { cursor: pointer; }
+button:hover { border-color: var(--muted); }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.card .k { font-size: 12px; color: var(--muted); }
+.card .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.card .n { font-size: 12px; color: var(--muted); }
+.note { background: var(--hi); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; }
+.D { color: var(--dem); } .R { color: var(--rep); }
+.good { color: var(--good); } .bad { color: var(--bad); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.toolbar .spacer { flex: 1; }
+.tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--panel); font-size: 12px; color: var(--muted);
+  cursor: pointer; user-select: none; }
+th:first-child, td:first-child { text-align: left; }
+tr.done td { background: color-mix(in srgb, var(--hi) 60%, transparent); }
+td input[type=number] { width: 90px; padding: 3px 6px; text-align: right; }
+details { margin: 12px 0; }
+textarea { width: 100%; min-height: 110px; font-family: ui-monospace, monospace; font-size: 12px; }
+.small { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Senate Flip Benchmarks</h1>
+  <p class="sub">Swing from the 2024 presidential vote needed to flip a 2026 Senate seat, projected to each county.
+    Margins are two-party (Dem − Rep share of Dem + Rep votes).</p>
+
+  <div class="controls">
+    <label>State <select id="state"></select></label>
+    <label>Target winner <select id="target">
+      <option value="flip">Flip the seat</option>
+      <option value="D">Democrat / Ind.</option>
+      <option value="R">Republican</option>
+    </select></label>
+    <label>Target margin (pts) <input id="tmargin" type="number" step="0.5" value="0" style="width:90px"></label>
+    <label>Swing model <select id="model">
+      <option value="uniform">Uniform (same shift in every county)</option>
+      <option value="logit">Proportional (smaller shift in lopsided counties)</option>
+    </select></label>
+  </div>
+
+  <div id="note" class="note" hidden></div>
+  <div class="cards" id="cards"></div>
+
+  <div class="toolbar">
+    <input id="search" placeholder="Filter counties" style="width:180px">
+    <label class="small"><input type="checkbox" id="onlyDone"> Completed only</label>
+    <span class="spacer"></span>
+    <button id="exportBtn">Export CSV</button>
+    <button id="clearBtn">Clear 2026 entries</button>
+  </div>
+
+  <details>
+    <summary>Paste results</summary>
+    <p class="small">One county per line: <code>county or FIPS, dem votes, rep votes[, complete]</code>.
+      The last column is optional (1/yes/y = complete; omitted = complete). Names match with or without "County"/"Parish".</p>
+    <textarea id="paste" placeholder="Fulton, 412000, 115000&#10;13121, 412000, 115000, 1"></textarea>
+    <p><button id="pasteBtn">Apply</button> <span id="pasteMsg" class="small"></span></p>
+  </details>
+
+  <div class="tablewrap"><table>
+    <thead><tr id="head"></tr></thead>
+    <tbody id="body"></tbody>
+  </table></div>
+  <p class="small">2024 data: county totals from tonmcg/US_County_Level_Election_Results_08-24 (Alaska by state house district).
+    Benchmarks hold 2024 turnout fixed by county. Entries are saved in this browser only.</p>
+</main>
+
+<script src="data/pres2024.js"></script>
+<script src="data/senate2026.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const fmtInt = (n) => n == null ? "" : Math.round(n).toLocaleString();
+const fmtM = (m) => {
+  if (m == null || !isFinite(m)) return "";
+  if (Math.abs(m) < 0.05) return "Even";
+  return (m > 0 ? "D+" : "R+") + Math.abs(m).toFixed(1);
+};
+const fmtSigned = (x) => x == null || !isFinite(x) ? "" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(1);
+const cls = (m) => m > 0 ? "D" : m < 0 ? "R" : "";
+
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+let state, rows, entries, sortKey = "name", sortDir = 1;
+
+// Two-party margin in points, D positive.
+const margin2p = (d, r) => d + r > 0 ? 100 * (d - r) / (d + r) : null;
+
+// Shifts county margins by a parameter so callers can solve for a statewide target.
+function shifted(m, k, model) {
+  if (model === "uniform") return Math.max(-100, Math.min(100, m + k));
+  const p = Math.min(Math.max((m + 100) / 200, 1e-6), 1 - 1e-6);
+  const q = 1 / (1 + Math.exp(-(Math.log(p / (1 - p)) + k)));
+  return 200 * q - 100;
+}
+
+function statewide(k, model) {
+  let num = 0, den = 0;
+  for (const r of rows) { num += r.tp * shifted(r.m24, k, model); den += r.tp; }
+  return num / den;
+}
+
+function solveShift(target, model) {
+  let lo = model === "uniform" ? -200 : -20, hi = -lo;
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2;
+    if (statewide(mid, model) < target) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+function race() { return window.SENATE2026.find((s) => s.state === state); }
+
+function targetParty() {
+  const t = $("target").value;
+  return t === "flip" ? (race().holder === "D" ? "R" : "D") : t;
+}
+
+function load() {
+  state = $("state").value;
+  rows = (window.PRES2024[state] || []).map(([fips, name, d, r, total]) => ({
+    fips, name, d24: d, r24: r, total24: total, tp: d + r, m24: margin2p(d, r),
+  }));
+  entries = store.get("entries:" + state) || {};
+  store.set("lastState", state);
+  render();
+}
+
+function compute() {
+  const party = targetParty();
+  const tm = Math.abs(parseFloat($("tmargin").value) || 0);
+  const target = party === "D" ? tm : -tm;
+  const model = $("model").value;
+  const tp24 = rows.reduce((a, r) => a + r.tp, 0);
+  const m24 = rows.reduce((a, r) => a + r.tp * r.m24, 0) / tp24;
+  const k = solveShift(target, model);
+  for (const r of rows) {
+    r.bench = shifted(r.m24, k, model);
+    const e = entries[r.fips];
+    r.d26 = e?.d ?? null; r.r26 = e?.r ?? null; r.done = !!e?.done;
+    r.m26 = r.d26 != null && r.r26 != null ? margin2p(r.d26, r.r26) : null;
+    r.tp26 = r.m26 != null ? r.d26 + r.r26 : null;
+    r.vsBench = r.m26 != null ? r.m26 - r.bench : null;
+    r.swing = r.m26 != null ? r.m26 - r.m24 : null;
+    r.turnout = r.tp26 != null ? 100 * r.tp26 / r.tp : null;
+    // Net Dem votes relative to the benchmark at the county's actual turnout.
+    r.netVsBench = r.m26 != null ? r.tp26 * r.vsBench / 100 : null;
+  }
+  const done = rows.filter((r) => r.done && r.m26 != null);
+  const s = { party, target, m24, need: target - m24, tp24, done, model };
+  if (done.length) {
+    const tpd = done.reduce((a, r) => a + r.tp26, 0);
+    s.avgVs = done.reduce((a, r) => a + r.tp26 * r.vsBench, 0) / tpd;
+    s.avgSwing = done.reduce((a, r) => a + r.tp26 * r.swing, 0) / tpd;
+    s.net = done.reduce((a, r) => a + r.netVsBench, 0);
+    s.turnout = 100 * tpd / done.reduce((a, r) => a + r.tp, 0);
+    s.share = 100 * done.reduce((a, r) => a + r.tp, 0) / tp24;
+    s.proj = target + s.avgVs;
+    s.projSwing = m24 + s.avgSwing;
+  }
+  return s;
+}
+
+function render() {
+  const s = compute();
+  const rc = race();
+  const note = $("note");
+  note.hidden = !rc.note; note.textContent = rc.note || "";
+  const pName = s.party === "D" ? "Democrat / Ind." : "Republican";
+  const towardD = s.need >= 0;
+  const ahead = s.avgVs != null ? (s.party === "D" ? s.avgVs >= 0 : s.avgVs <= 0) : null;
+  const card = (k, v, n, c = "") => `<div class="card"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="n">${n}</div></div>`;
+  $("cards").innerHTML = [
+    card("Seat held by", rc.holder === "D" ? "Dem" : "Rep", `Target: ${pName}${rc.holder === s.party ? " (hold)" : " (flip)"}`, rc.holder),
+    card("2024 president", fmtM(s.m24), `${fmtInt(s.tp24)} two-party votes`, cls(s.m24)),
+    (s.party === "D") === towardD
+      ? card("Swing needed", `${Math.abs(s.need).toFixed(1)} pts ${towardD ? "D" : "R"}`,
+        `Margin shift to reach ${fmtM(s.target)}`, towardD ? "D" : "R")
+      : card("Cushion", `${Math.abs(s.need).toFixed(1)} pts ${towardD ? "D" : "R"}`,
+        `${pName} still reaches ${fmtM(s.target)} after this swing against them`, towardD ? "D" : "R"),
+    card("Completed counties", `${s.done.length} / ${rows.length}`,
+      s.share != null ? `${s.share.toFixed(1)}% of 2024 two-party vote` : "None marked complete"),
+    card("Vs benchmark", s.avgVs != null ? fmtSigned(Math.abs(s.avgVs)) + (s.avgVs >= 0 ? " D" : " R") : "–",
+      s.avgVs != null ? `${ahead ? "Ahead of" : "Behind"} ${pName} pace; ${fmtInt(Math.abs(s.net))} net votes` : "Weighted by 2026 votes",
+      ahead == null ? "" : ahead ? "good" : "bad"),
+    card("Projected statewide", s.proj != null ? fmtM(s.proj) : "–",
+      s.proj != null ? `Uniform swing so far: ${fmtM(s.projSwing)}; turnout ${s.turnout.toFixed(0)}% of 2024` : "From completed counties",
+      s.proj != null ? cls(s.proj) : ""),
+  ].join("");
+  renderTable();
+}
+
+const COLS = [
+  ["name", "County"], ["m24", "2024 margin"], ["bench", "Benchmark"], ["tp", "2024 votes"],
+  ["d26", "2026 Dem"], ["r26", "2026 Rep"], ["done", "Done"], ["m26", "2026 margin"],
+  ["vsBench", "Vs bench"], ["swing", "Swing vs 2024"], ["turnout", "Turnout %"],
+];
+
+function renderTable() {
+  $("head").innerHTML = COLS.map(([k, l]) =>
+    `<th data-k="${k}">${l}${sortKey === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("");
+  const q = $("search").value.trim().toLowerCase();
+  const only = $("onlyDone").checked;
+  const party = targetParty();
+  const list = rows.filter((r) => (!q || r.name.toLowerCase().includes(q) || r.fips.includes(q)) && (!only || r.done));
+  list.sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    if (x == null) return 1; if (y == null) return -1;
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * sortDir;
+  });
+  $("body").innerHTML = list.map((r) => {
+    const good = r.vsBench == null ? "" : (party === "D" ? r.vsBench >= 0 : r.vsBench <= 0) ? "good" : "bad";
+    return `<tr class="${r.done ? "done" : ""}" data-f="${r.fips}">
+      <td>${r.name}</td>
+      <td class="${cls(r.m24)}">${fmtM(r.m24)}</td>
+      <td class="${cls(r.bench)}"><b>${fmtM(r.bench)}</b></td>
+      <td>${fmtInt(r.tp)}</td>
+      <td><input type="number" min="0" data-c="d" value="${r.d26 ?? ""}"></td>
+      <td><input type="number" min="0" data-c="r" value="${r.r26 ?? ""}"></td>
+      <td><input type="checkbox" data-c="done" ${r.done ? "checked" : ""}></td>
+      <td class="${cls(r.m26)}">${fmtM(r.m26)}</td>
+      <td class="${good}">${r.vsBench == null ? "" : fmtSigned(Math.abs(r.vsBench)) + (r.vsBench >= 0 ? " D" : " R")}</td>
+      <td>${r.swing == null ? "" : fmtSigned(Math.abs(r.swing)) + (r.swing >= 0 ? " D" : " R")}</td>
+      <td>${r.turnout == null ? "" : r.turnout.toFixed(0)}</td>
+    </tr>`;
+  }).join("");
+}
+
+function setEntry(fips, patch) {
+  const e = { ...(entries[fips] || {}), ...patch };
+  if (e.d == null && e.r == null && !e.done) delete entries[fips]; else entries[fips] = e;
+  store.set("entries:" + state, entries);
+}
+
+const norm = (s) => s.toLowerCase().replace(/\b(county|parish|borough|census area|city and borough|municipality)\b/g, "")
+  .replace(/[^a-z0-9]/g, "");
+
+function applyPaste() {
+  const byKey = new Map();
+  for (const r of rows) { byKey.set(r.fips, r); byKey.set(norm(r.name), r); }
+  let ok = 0; const miss = [];
+  for (const line of $("paste").value.split(/\r?\n/)) {
+    const parts = line.split(/[,\t]/).map((x) => x.trim());
+    if (parts.length < 3 || !parts[0]) continue;
+    const r = byKey.get(parts[0].padStart(5, "0")) || byKey.get(norm(parts[0]));
+    const d = parseInt(parts[1].replace(/[^0-9]/g, ""), 10), rep = parseInt(parts[2].replace(/[^0-9]/g, ""), 10);
+    if (!r || isNaN(d) || isNaN(rep)) { miss.push(parts[0]); continue; }
+    const done = parts[3] == null || parts[3] === "" || /^(1|y|yes|true|x)$/i.test(parts[3]);
+    setEntry(r.fips, { d, r: rep, done });
+    ok++;
+  }
+  $("pasteMsg").textContent = `Applied ${ok} rows.` + (miss.length ? ` Not matched: ${miss.slice(0, 8).join(", ")}${miss.length > 8 ? "…" : ""}` : "");
+  render();
+}
+
+function exportCsv() {
+  const s = compute();
+  const lines = [["fips", "county", "margin_2024", "benchmark", "votes_2024_2p", "dem_2026", "rep_2026", "complete", "margin_2026", "vs_benchmark", "swing"].join(",")];
+  for (const r of rows) lines.push([r.fips, `"${r.name}"`, r.m24.toFixed(2), r.bench.toFixed(2), r.tp, r.d26 ?? "", r.r26 ?? "",
+    r.done ? 1 : 0, r.m26?.toFixed(2) ?? "", r.vsBench?.toFixed(2) ?? "", r.swing?.toFixed(2) ?? ""].join(","));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+  a.download = `${state.replace(/ /g, "_")}_benchmarks_${s.party}.csv`;
+  a.click();
+}
+
+$("state").innerHTML = window.SENATE2026.map((s) =>
+  `<option>${s.state}</option>`).join("");
+const last = store.get("lastState");
+if (last && window.SENATE2026.some((s) => s.state === last)) $("state").value = last;
+
+$("state").addEventListener("change", load);
+for (const id of ["target", "tmargin", "model"]) $(id).addEventListener("input", render);
+for (const id of ["search", "onlyDone"]) $(id).addEventListener("input", renderTable);
+$("head").addEventListener("click", (ev) => {
+  const k = ev.target.closest("th")?.dataset.k; if (!k) return;
+  sortDir = sortKey === k ? -sortDir : 1; sortKey = k; renderTable();
+});
+$("body").addEventListener("change", (ev) => {
+  const el = ev.target, fips = el.closest("tr")?.dataset.f; if (!fips) return;
+  const c = el.dataset.c;
+  if (c === "done") setEntry(fips, { done: el.checked });
+  else { const v = el.value === "" ? null : Math.max(0, parseInt(el.value, 10)); setEntry(fips, { [c]: v }); }
+  // Re-render after focus moves so tabbing between inputs keeps its place.
+  setTimeout(() => {
+    const a = document.activeElement, f = a?.closest?.("tr")?.dataset.f, ac = a?.dataset?.c;
+    render();
+    if (f && ac) document.querySelector(`tr[data-f="${f}"] [data-c="${ac}"]`)?.focus();
+  }, 0);
+});
+$("pasteBtn").addEventListener("click", applyPaste);
+$("exportBtn").addEventListener("click", exportCsv);
+$("clearBtn").addEventListener("click", () => {
+  if (!confirm(`Clear all 2026 entries for ${state}?`)) return;
+  entries = {}; store.set("entries:" + state, entries); render();
+});
+load();
+</script>
+</body>
+</html>
